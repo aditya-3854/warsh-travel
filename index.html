@@ -488,6 +488,23 @@ function goToDashboardTop() {
                 💳 Pay & Confirm Booking
             </button>
 
+            <button
+                type="button"
+                class="home-btn"
+                onclick="cancelPayment()"
+                style="width:100%;margin-top:10px;padding:13px;border:0;border-radius:7px;color:#fff;cursor:pointer;font-size:16px;font-weight:700;"
+            >
+                ❌ Cancel Payment
+            </button>
+
+            <button
+                type="button"
+                class="home-btn"
+                onclick="homeFromPayment()"
+                style="width:100%;margin-top:10px;padding:13px;border:0;border-radius:7px;color:#fff;cursor:pointer;font-size:16px;font-weight:700;"
+            >
+                🏠 Home
+            </button>
 
             <div
                 id="payment-message"
@@ -779,13 +796,12 @@ function searchDestinations() {
     }
 
     function openBusBooking(index, busNo) {
-      if (!currentUser) {
-        alert("Please login first to book a bus.");
-        showLogin();
-        return;
-      }
-
+      // IMPORTANT: open the seat window even when the visitor is not logged in.
+      // Login is checked later when the booking/payment is confirmed.
       selectedDestination = destinations.find(bus => bus.busNo === busNo);
+      if (!selectedDestination && destinations[index]) {
+        selectedDestination = destinations[index];
+      }
       const bus = selectedDestination;
       if (!bus) return;
 
@@ -1135,15 +1151,36 @@ function searchDestinations() {
        PAYMENT
     ============================ */
 
+    function cancelPayment() {
+        window.selectedSeat = null;
+        selectedDestination = null;
+        const msg = document.getElementById("payment-message");
+        if (msg) msg.innerHTML = "";
+        closeBookingModal();
+    }
+
+    function homeFromPayment() {
+        cancelPayment();
+        showHome();
+        window.scrollTo({top: 0, behavior: "smooth"});
+    }
+
     function makePayment() {
 
-        const date =
-            document.getElementById("booking-date").value;
+        const dateEl = document.getElementById("booking-date");
+        const methodEl = document.getElementById("payment-method");
+        const date = dateEl ? dateEl.value : "";
+        const method = methodEl ? methodEl.value : "UPI";
 
+        if (!selectedDestination) {
+            alert("Please select a bus first.");
+            return;
+        }
 
-        const method =
-            document.getElementById("payment-method").value;
-
+        if (!window.selectedSeat) {
+            alert("Please select a seat first.");
+            return;
+        }
 
         if (!date) {
 
@@ -1153,15 +1190,6 @@ function searchDestinations() {
         }
 
 
-        if (!selectedDestination) {
-            alert("Please select a bus.");
-            return;
-        }
-
-        if (!window.selectedSeat) {
-            alert("Please select a seat.");
-            return;
-        }
 
 
         /*
@@ -1201,6 +1229,11 @@ function searchDestinations() {
             bookedAt: new Date().toLocaleString("en-IN")
         });
 
+        // Keep bookings saved for this logged-in user.
+        const storageKey = currentUser && currentUser.email
+            ? "warsh_bookings_" + currentUser.email.toLowerCase()
+            : "warsh_guest_bookings";
+        localStorage.setItem(storageKey, JSON.stringify(bookings));
 
         document.getElementById("payment-message").innerHTML = `
 
@@ -1219,7 +1252,11 @@ function searchDestinations() {
 
             closeBookingModal();
 
-            showDashboard();
+            if (typeof showDashboard === "function" && currentUser) {
+              showDashboard();
+            } else {
+              showHome();
+            }
 
         }, 1800);
 
@@ -1369,20 +1406,13 @@ function searchDestinations() {
       btn.addEventListener('click', () => {
         const buses = findBusInventory();
         const bus = buses[Number(btn.dataset.busIndex)];
-        // Reuse the existing booking flow where possible.
-        if(typeof window.openBookingModal === 'function') {
-          window.openBookingModal(bus);
-        } else if(typeof window.openBooking === 'function') {
-          window.openBooking(bus);
+        if (!bus) return;
+        // Resolve by the unique bus number so filtered lists can never point
+        // to the wrong route.
+        if (typeof window.openBusBooking === 'function') {
+          window.openBusBooking(Number(btn.dataset.busIndex), bus.busNo || bus.busNumber || bus.number);
         } else {
-          // Fall back to the search/result flow by filling route fields and clicking search.
-          const fromInput = document.querySelector('#from, #fromCity, input[name="from"]');
-          const toInput = document.querySelector('#to, #toCity, input[name="to"]');
-          if(fromInput) fromInput.value = bus.from || bus.source || bus.origin || '';
-          if(toInput) toInput.value = bus.to || bus.destination || bus.dest || '';
-          const searchBtn = document.querySelector('#searchBtn, .search-btn, button[type="submit"]');
-          if(searchBtn) searchBtn.click();
-          window.scrollTo({top:0, behavior:'smooth'});
+          alert('Booking module is not available. Please refresh the page.');
         }
       });
     });
